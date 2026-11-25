@@ -3,7 +3,7 @@
 //
 // Deterministic: the same exact text is written on every run. No network,
 // no randomness, no environment access except MAKEFUN_OUTPUT_DIR.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const LINE =
@@ -38,6 +38,21 @@ function main(): void {
   checkGate(written);
   if (written !== LINE) {
     throw new Error("read-back mismatch: bytes on disk differ from LINE");
+  }
+
+  // Byte-level re-validation: the file on disk must hold exactly the
+  // bytes of LINE — no truncation, no appended newline, no partial write.
+  // A string comparison alone cannot see a trailing byte that still
+  // parses as text, so check the on-disk size and the code-point count.
+  const onDiskBytes = statSync(outPath).size;
+  const expectedBytes = Buffer.byteLength(LINE, "utf8");
+  if (onDiskBytes !== expectedBytes) {
+    throw new Error(
+      `read-back size mismatch: ${onDiskBytes} bytes on disk, expected ${expectedBytes}`,
+    );
+  }
+  if ([...written].length !== [...LINE].length) {
+    throw new Error("read-back code-point count differs from LINE");
   }
 }
 
